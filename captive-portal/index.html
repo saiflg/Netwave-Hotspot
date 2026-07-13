@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blue Dot Networks — Connect to Internet</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter','Segoe UI',sans-serif;background:#0A0A14;color:#F1F5F9;min-height:100vh;display:flex;flex-direction:column}
+    :root{--primary:#6366F1;--secondary:#8B5CF6;--accent:#EC4899;--success:#10B981;--danger:#EF4444;--warn:#F59E0B;--dark:#0D0D1A;--card:#12121E;--border:#2D2D3F;--muted:#64748B;--subtle:#94A3B8}
+    @keyframes fadeUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .fade-up{animation:fadeUp 0.6s ease both}
+    .spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+
+    nav{background:rgba(13,13,26,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 5%;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+    .logo{display:flex;align-items:center;gap:10px;text-decoration:none}
+    .logo-img{height:40px;object-fit:contain;border-radius:8px;background:#fff;padding:3px}
+    .logo-fallback{width:38px;height:38px;background:linear-gradient(135deg,var(--primary),var(--accent));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+    .logo-text{font-weight:900;font-size:17px;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .nav-signal{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--subtle);font-weight:600}
+    .signal-dot{width:8px;height:8px;border-radius:50%;background:var(--success);animation:pulse 2s infinite}
+
+    main{flex:1;padding:32px 5%;max-width:1100px;margin:0 auto;width:100%}
+
+    /* ── Hero ── */
+    .hero{text-align:center;padding:48px 0 36px;animation:fadeUp .7s ease}
+    .status-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:6px 16px;margin-bottom:22px;animation:pulse 2.5s infinite}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
+    h1{font-size:clamp(24px,4vw,42px);font-weight:900;line-height:1.15;margin-bottom:12px;background:linear-gradient(135deg,#F1F5F9 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hero-sub{font-size:15px;color:var(--muted);max-width:460px;margin:0 auto 30px;line-height:1.7}
+
+    /* ── Tabs ── */
+    .tabs{display:flex;background:rgba(13,13,26,.8);border-radius:12px;padding:5px;gap:4px;width:fit-content;margin:0 auto 28px}
+    .tab{border:none;background:transparent;color:var(--muted);padding:10px 20px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit}
+    .tab.active{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;box-shadow:0 4px 12px rgba(99,102,241,.3)}
+
+    /* ── Cards ── */
+    .login-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;max-width:420px;margin:0 auto}
+    label{display:block;color:var(--subtle);font-size:11px;font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em}
+    input{width:100%;background:#0D0D1A;border:1px solid var(--border);border-radius:8px;color:#F1F5F9;padding:11px 13px;font-size:14px;outline:none;transition:border-color .15s;font-family:inherit}
+    input:focus{border-color:var(--primary)}
+    input.code-input{font-family:monospace;letter-spacing:3px;font-size:18px;font-weight:900;text-transform:uppercase;text-align:center}
+    .field{margin-bottom:14px}
+    .btn{width:100%;border:none;border-radius:9px;color:#fff;padding:13px;font-weight:800;font-size:15px;cursor:pointer;background:linear-gradient(135deg,var(--primary),var(--secondary));transition:all .15s;display:flex;align-items:center;justify-content:center;gap:10px;margin-top:6px;font-family:inherit}
+    .btn:hover{opacity:.9;transform:translateY(-1px)}
+    .btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+    .btn.buy-btn{background:linear-gradient(135deg,var(--success),#059669)}
+    .btn.danger{background:linear-gradient(135deg,var(--danger),#f97316)}
+    .btn.ghost{background:rgba(255,255,255,.07);border:1px solid var(--border)}
+
+    /* ── Alerts ── */
+    .alert{border-radius:10px;padding:13px 16px;margin-bottom:14px;font-size:13px;font-weight:600;display:flex;align-items:flex-start;gap:10px;line-height:1.5}
+    .alert.success{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--success)}
+    .alert.error{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--danger)}
+    .alert.info{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.3);color:#A5B4FC}
+    .alert.warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--warn)}
+
+    /* ── Session ── */
+    .session-card{background:linear-gradient(135deg,rgba(16,185,129,.12),rgba(99,102,241,.08));border:1px solid rgba(16,185,129,.3);border-radius:16px;padding:28px;max-width:480px;margin:0 auto;text-align:center}
+    .session-icon{font-size:54px;margin-bottom:14px}
+    .session-title{font-size:22px;font-weight:900;color:var(--success);margin-bottom:8px}
+    .session-sub{color:var(--muted);font-size:14px;margin-bottom:22px;line-height:1.6}
+    .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+    .stat-box{background:rgba(13,13,26,.6);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:left}
+    .stat-label{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+    .stat-value{font-size:18px;font-weight:900;color:#F1F5F9}
+
+    /* ── Plans ── */
+    .plans-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin:28px 0}
+    .plan-card{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all .2s;text-align:center}
+    .plan-card:hover,.plan-card.selected{border-color:var(--primary);transform:translateY(-3px);box-shadow:0 8px 24px rgba(99,102,241,.2)}
+    .plan-name{font-size:16px;font-weight:800;margin-bottom:4px}
+    .plan-duration{color:var(--muted);font-size:12px;margin-bottom:12px}
+    .plan-price{font-size:26px;font-weight:900;color:var(--primary);margin-bottom:10px}
+    .plan-feature{font-size:11px;color:var(--subtle);margin-bottom:3px}
+
+    /* ── Buy form ── */
+    .buy-form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:460px;margin:0 auto}
+    .gateway-row{display:flex;gap:10px;margin-bottom:14px}
+    .gateway-btn{flex:1;border:2px solid var(--border);border-radius:9px;padding:11px;text-align:center;cursor:pointer;font-weight:700;font-size:13px;color:var(--muted);transition:all .15s;background:transparent;font-family:inherit}
+    .gateway-btn.active{border-color:var(--primary);background:rgba(99,102,241,.15);color:#fff}
+    .divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:var(--muted);font-size:12px}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* ── Footer ── */
+    footer{background:#0D0D1A;border-top:1px solid var(--border);padding:24px 5%;text-align:center}
+    footer a{color:var(--muted);text-decoration:none;font-size:12px;margin:0 10px;transition:color .15s}
+    footer a:hover{color:var(--primary)}
+    .footer-copy{color:#334155;font-size:11px;margin-top:10px}
+
+    /* ── Expiry banner ── */
+    .expiry-banner{background:rgba(239,68,68,.1);border:2px solid rgba(239,68,68,.4);border-radius:14px;padding:24px;max-width:480px;margin:0 auto 28px;text-align:center}
+    .expiry-icon{font-size:40px;margin-bottom:12px}
+    .expiry-title{font-size:18px;font-weight:900;color:var(--danger);margin-bottom:8px}
+    .expiry-msg{color:var(--subtle);font-size:14px;line-height:1.6}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="logo" href="/portal">
+    <img class="logo-img" id="nav-logo" src="/uploads/logo.jpg" alt="Blue Dot Networks"
+      onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex'">
+    <div class="logo-fallback" id="logo-fallback" style="display:none">📡</div>
+    <span class="logo-text" id="company-name">Blue Dot Networks</span>
+  </a>
+  <div class="nav-signal">
+    <div class="signal-dot"></div>
+    <span id="nav-status">Checking...</span>
+  </div>
+</nav>
+
+<main>
+  <!-- ── EXPIRY / DISCONNECT BANNER (shown when redirected after expiry) ── -->
+  <div id="expiry-banner" class="expiry-banner" style="display:none">
+    <div class="expiry-icon">⏰</div>
+    <div class="expiry-title" id="expiry-title">Session Ended</div>
+    <div class="expiry-msg" id="expiry-msg">Your internet plan has expired. Please purchase a new package or log in with another voucher.</div>
+  </div>
+
+  <!-- ── HERO ── -->
+  <div class="hero fade-up" id="hero-section">
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span class="status-text" id="status-text">Network Online · Fast & Secure</span>
+    </div>
+    <h1 id="hero-title">Connect to the Internet</h1>
+    <p class="hero-sub" id="hero-sub">Choose a plan or enter your voucher to get online instantly.</p>
+  </div>
+
+  <!-- ── TABS ── -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('voucher')">🎟 Voucher</button>
+    <button class="tab"        onclick="showTab('login')">🔑 Login</button>
+    <button class="tab"        onclick="showTab('buy')">💳 Buy Data</button>
+  </div>
+
+  <!-- ══════════════════════════ VOUCHER TAB ══════════════════════════ -->
+  <div id="tab-voucher">
+    <div class="login-card">
+      <div id="voucher-alert"></div>
+      <div class="field">
+        <label>Enter Voucher Code</label>
+        <input id="voucher-code" class="code-input" type="text" placeholder="NW-XXXXXXXX"
+          maxlength="20" autocomplete="off" autocapitalize="characters"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')doVoucherLogin()">
+      </div>
+      <button class="btn" onclick="doVoucherLogin()" id="btn-voucher">
+        <span class="spinner" id="spin-voucher" style="display:none"></span>
+        🌐 Connect Now
+      </button>
+      <div class="divider">or</div>
+      <button class="btn buy-btn" onclick="showTab('buy')">💳 Buy a Voucher</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ LOGIN TAB ══════════════════════════ -->
+  <div id="tab-login" style="display:none">
+    <div class="login-card">
+      <div id="login-alert"></div>
+      <div class="field">
+        <label>Username</label>
+        <input id="login-user" type="text" placeholder="your username"
+          onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input id="login-pass" type="password" placeholder="••••••••"
+          onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn" onclick="doLogin()" id="btn-login">
+        <span class="spinner" id="spin-login" style="display:none"></span>
+        🔑 Log In
+      </button>
+      <div class="divider">don't have an account?</div>
+      <button class="btn buy-btn" onclick="showTab('buy')">💳 Buy Data Now</button>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ BUY TAB ══════════════════════════ -->
+  <div id="tab-buy" style="display:none">
+    <div style="text-align:center;margin-bottom:18px">
+      <h3 style="font-size:18px;font-weight:800;margin-bottom:6px">Choose Your Plan</h3>
+      <p style="color:var(--muted);font-size:13px">Pay securely · Instant activation · No registration needed</p>
+    </div>
+
+    <div class="plans-grid" id="plans-grid">
+      <div style="text-align:center;color:var(--muted);grid-column:1/-1;padding:24px">Loading plans...</div>
+    </div>
+
+    <div class="buy-form" id="buy-form" style="display:none">
+      <div id="buy-alert"></div>
+      <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:800;font-size:15px" id="selected-plan-name">—</div>
+          <div style="color:var(--muted);font-size:12px" id="selected-plan-detail">—</div>
+        </div>
+        <div style="font-size:22px;font-weight:900;color:var(--primary)" id="selected-plan-price">₦0</div>
+      </div>
+
+      <div class="field">
+        <label>Your Name *</label>
+        <input id="buy-name" type="text" placeholder="Aminu Bello">
+      </div>
+      <div class="field">
+        <label>Email Address *</label>
+        <input id="buy-email" type="email" placeholder="you@example.com">
+      </div>
+      <div class="field">
+        <label>Phone Number</label>
+        <input id="buy-phone" type="tel" placeholder="08012345678">
+      </div>
+
+      <div class="field">
+        <label>Payment Method</label>
+        <div class="gateway-row">
+          <button class="gateway-btn active" id="gw-paystack"    onclick="setGateway('PAYSTACK')">💳 Paystack</button>
+          <button class="gateway-btn"        id="gw-flutterwave" onclick="setGateway('FLUTTERWAVE')">💸 Flutterwave</button>
+        </div>
+      </div>
+
+      <button class="btn" onclick="doBuy()" id="btn-buy">
+        <span class="spinner" id="spin-buy" style="display:none"></span>
+        <span id="btn-buy-label">Pay Now →</span>
+      </button>
+      <button class="btn ghost" onclick="backToPlans()" style="margin-top:8px">← Choose Different Plan</button>
+      <p style="color:var(--muted);font-size:11px;text-align:center;margin-top:10px">🔒 Secured by your payment provider · SSL encrypted</p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ SESSION TAB ══════════════════════════ -->
+  <div id="tab-session" style="display:none">
+    <div class="session-card">
+      <div class="session-icon">🌐</div>
+      <div class="session-title">You're Connected!</div>
+      <div class="session-sub" id="session-greeting">You have internet access. Enjoy browsing!</div>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">Time Remaining</div>
+          <div class="stat-value" id="stat-time">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Plan</div>
+          <div class="stat-value" style="font-size:14px" id="stat-plan">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Connected Since</div>
+          <div class="stat-value" style="font-size:14px" id="stat-since">—</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Voucher Code</div>
+          <div class="stat-value" style="font-size:13px;font-family:monospace" id="stat-code">—</div>
+        </div>
+      </div>
+
+      <button class="btn danger" onclick="doLogout()" id="btn-logout">🔌 Disconnect</button>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div style="margin-bottom:10px">
+    <a href="/legal/privacy-policy" target="_blank">Privacy Policy</a>
+    <a href="/legal/terms"          target="_blank">Terms & Conditions</a>
+    <a href="/legal/contact"        target="_blank">Contact</a>
+    <a href="/legal/faq"            target="_blank">FAQ</a>
+  </div>
+  <p class="footer-copy" id="footer-text">© 2025 Blue Dot Networks. All rights reserved.</p>
+</footer>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIGURATION
+// Replace BACKEND_URL with your actual Render backend URL
+// This is injected at deploy time from BACKEND_URL env var
+// ════════════════════════════════════════════════════════════════════════════
+const BACKEND_URL = (window.__BDN_API__ || '').replace(/\/$/, '') ||
+  (window.location.hostname === 'localhost' ? 'http://localhost:5000' : window.location.origin);
+const API = BACKEND_URL + '/api/v1';
+
+// ════════════════════════════════════════════════════════════════════════════
+// MIKROTIK URL PARAMETERS
+// MikroTik injects these into the redirect URL automatically:
+//   $(mac)            — device MAC address
+//   $(ip)             — device IP address
+//   $(username)       — pre-filled username (if any)
+//   $(link-orig)      — original URL the user was trying to visit
+//   $(chap-id)        — CHAP challenge ID for secure login
+//   $(chap-challenge) — CHAP challenge string
+//   $(error)          — error code on failed login
+// ════════════════════════════════════════════════════════════════════════════
+const urlParams   = new URLSearchParams(window.location.search);
+const MK_MAC      = urlParams.get('mac')            || urlParams.get('id') || '';
+const MK_IP       = urlParams.get('ip')             || '';
+const MK_USERNAME = urlParams.get('username')       || '';
+const MK_LINK_ORIG= urlParams.get('link-orig')      || urlParams.get('link_orig') || '';
+const MK_CHAP_ID  = urlParams.get('chap-id')        || urlParams.get('chap_id') || '';
+const MK_CHAP     = urlParams.get('chap-challenge') || urlParams.get('chap_challenge') || '';
+const MK_ERROR    = urlParams.get('error')          || '';
+const MK_ROUTER_IP= urlParams.get('router-ip')      || urlParams.get('router_ip') || '';
+
+// ── State ──────────────────────────────────────────────────────────────────
+let sessionId       = null;
+let sessionVoucher  = null;
+let selectedPlan    = null;
+let selectedGateway = 'PAYSTACK';
+let countdownTimer  = null;
+let sessionStart    = null;
+
+// ════════════════════════════════════════════════════════════════════════════
+// MIKROTIK REDIRECT — grants actual internet access at firewall level
+// After our backend authenticates, we redirect the browser to the MikroTik
+// login endpoint which opens the firewall for this device.
+// ════════════════════════════════════════════════════════════════════════════
+function mikrotikGrantAccess(username, password) {
+  // The router IP is either passed as a param or we try common defaults
+  const routerIP = MK_ROUTER_IP || detectRouterIP();
+  if (!routerIP) {
+    // No router IP — we are in direct-backend mode (no MikroTik proxy)
+    console.log('[Portal] No router IP — skipping MikroTik redirect (direct mode)');
+    return;
+  }
+
+  // Build MikroTik login URL
+  // MikroTik reads this URL and opens firewall for the device MAC/IP
+  const dst = MK_LINK_ORIG || 'http://detectportal.firefox.com/';
+  const mkLoginURL = `http://${routerIP}/login` +
+    `?username=${encodeURIComponent(username)}` +
+    `&password=${encodeURIComponent(password)}` +
+    `&dst=${encodeURIComponent(dst)}`;
+
+  console.log('[Portal] Redirecting to MikroTik login:', mkLoginURL);
+
+  // Use a hidden iframe first (some devices need this for captive portal detection)
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = mkLoginURL;
+  document.body.appendChild(iframe);
+
+  // Then redirect the main window to the original destination
+  setTimeout(() => {
+    if (MK_LINK_ORIG && MK_LINK_ORIG !== '') {
+      window.location.href = MK_LINK_ORIG;
+    } else {
+      window.location.href = 'http://google.com';
+    }
+  }, 1500);
+}
+
+// Try to detect router IP from the page's origin
+function detectRouterIP() {
+  // If MikroTik is serving this page, its IP is the page origin
+  if (window.location.hostname !== 'localhost' && !window.location.hostname.includes('render') && !window.location.hostname.includes('vercel')) {
+    return window.location.hostname;
+  }
+  return null;
+}
+
+// MikroTik logout redirect
+function mikrotikLogout() {
+  const routerIP = MK_ROUTER_IP || detectRouterIP();
+  if (routerIP) {
+    // Tell MikroTik to close the session
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = `http://${routerIP}/logout`;
+    document.body.appendChild(iframe);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INIT — load branding, plans, check for expiry/error params
+// ════════════════════════════════════════════════════════════════════════════
+async function init() {
+  // Show expiry/disconnect banner if redirected here after session end
+  handleErrorParam();
+
+  try {
+    const res  = await fetch(`${API}/hotspot/config`);
+    const data = await res.json();
+    if (!data.success) return;
+
+    const cfg = data.data.config || {};
+
+    // Apply branding
+    if (cfg.company_name) {
+      document.getElementById('company-name').textContent = cfg.company_name;
+      document.title = cfg.company_name + ' — Connect to Internet';
+    }
+    if (cfg.captive_welcome)  document.getElementById('hero-title').textContent = cfg.captive_welcome;
+    if (cfg.captive_subtitle) document.getElementById('hero-sub').textContent   = cfg.captive_subtitle;
+    if (cfg.captive_footer)   document.getElementById('footer-text').textContent = cfg.captive_footer;
+    if (cfg.primary_color)    document.documentElement.style.setProperty('--primary',   cfg.primary_color);
+    if (cfg.secondary_color)  document.documentElement.style.setProperty('--secondary', cfg.secondary_color);
+    if (cfg.accent_color)     document.documentElement.style.setProperty('--accent',    cfg.accent_color);
+    if (cfg.logo_url) {
+      document.getElementById('nav-logo').src = BACKEND_URL + cfg.logo_url;
+    }
+
+    document.getElementById('nav-status').textContent = 'Network Online';
+
+    // Render plans
+    renderPlans(data.data.plans || []);
+
+    // Pre-fill username if MikroTik passed one
+    if (MK_USERNAME) document.getElementById('login-user').value = MK_USERNAME;
+
+  } catch (e) {
+    console.warn('[Portal] Config fetch failed:', e.message);
+    document.getElementById('nav-status').textContent = 'Connecting...';
+  }
+}
+
+// Handle MikroTik error parameter and expiry redirects
+function handleErrorParam() {
+  const banner = document.getElementById('expiry-banner');
+  const title  = document.getElementById('expiry-title');
+  const msg    = document.getElementById('expiry-msg');
+
+  if (MK_ERROR) {
+    const errorMessages = {
+      'failed':         { title: 'Login Failed',              msg: 'Invalid voucher code or credentials. Please try again.' },
+      'expired':        { title: 'Session Expired',           msg: 'Your internet plan has expired. Please purchase a new package or log in with another voucher.' },
+      'limit-reached':  { title: 'Data Limit Reached',        msg: 'You have used all your data for this session. Please purchase a new package to continue.' },
+      'time-reached':   { title: 'Time Limit Reached',        msg: 'Your time limit has been reached. Please purchase a new package to continue.' },
+      'disconnected':   { title: 'You Were Disconnected',     msg: 'Your session was ended by the network. Please log in again to continue.' },
+      'logout':         { title: 'Logged Out',                msg: 'You have been logged out. Log in again or buy a new plan to reconnect.' },
+    };
+    const info = errorMessages[MK_ERROR] || {
+      title: 'Session Ended',
+      msg:   'Your internet plan has expired or your session was disconnected. Please purchase a new package or log in with another voucher.',
+    };
+    title.textContent = info.title;
+    msg.textContent   = info.msg;
+    banner.style.display = 'block';
+    // Auto-scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Also check for our own expiry flag (set when voucher expires client-side)
+  const expired = sessionStorage.getItem('bdn_expired');
+  if (expired) {
+    sessionStorage.removeItem('bdn_expired');
+    title.textContent   = 'Session Expired';
+    msg.textContent     = 'Your internet plan has expired. Please purchase a new package or log in with another voucher.';
+    banner.style.display = 'block';
+  }
+}
+
+// ── Plans rendering ─────────────────────────────────────────────────────────
+function renderPlans(plans) {
+  const grid = document.getElementById('plans-grid');
+  if (!plans.length) {
+    grid.innerHTML = '<div style="text-align:center;color:var(--muted);grid-column:1/-1;padding:24px">No plans available right now</div>';
+    return;
+  }
+  grid.innerHTML = plans.map((p, i) => `
+    <div class="plan-card ${i === 1 ? 'selected' : ''}" onclick="selectPlan(this, ${JSON.stringify(p).replace(/"/g, '&quot;')})">
+      ${i === 1 ? '<div style="background:var(--primary);color:#fff;font-size:10px;font-weight:800;border-radius:4px;padding:2px 8px;display:inline-block;margin-bottom:8px;text-transform:uppercase">Popular</div>' : ''}
+      <div class="plan-name">${p.name}</div>
+      <div class="plan-duration">${p.validityLabel}</div>
+      <div class="plan-price">₦${Number(p.price).toLocaleString()}</div>
+      <div class="plan-feature">${p.unlimited ? '∞ Unlimited Data' : (p.dataLimit||'?') + 'MB Data'}</div>
+      <div class="plan-feature">⬇️ ${p.downloadSpeed}/${p.uploadSpeed} Mbps</div>
+    </div>
+  `).join('');
+  // Auto-select popular (index 1) or first plan
+  const firstPlan = plans[Math.min(1, plans.length - 1)];
+  if (firstPlan) selectPlan(null, firstPlan, true);
+}
+
+function selectPlan(el, plan, silent) {
+  selectedPlan = plan;
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  if (el) el.classList.add('selected');
+  document.getElementById('selected-plan-name').textContent   = plan.name;
+  document.getElementById('selected-plan-detail').textContent = `${plan.validityLabel} · ${plan.downloadSpeed}/${plan.uploadSpeed} Mbps · ${plan.unlimited ? 'Unlimited' : plan.dataLimit + 'MB'}`;
+  document.getElementById('selected-plan-price').textContent  = `₦${Number(plan.price).toLocaleString()}`;
+  document.getElementById('btn-buy-label').textContent        = `Pay ₦${Number(plan.price).toLocaleString()} →`;
+  if (!silent) document.getElementById('buy-form').style.display = 'block';
+  document.getElementById('buy-form').style.display = 'block';
+}
+
+function backToPlans() {
+  selectedPlan = null;
+  document.getElementById('buy-form').style.display = 'none';
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+}
+
+function setGateway(gw) {
+  selectedGateway = gw;
+  document.getElementById('gw-paystack').classList.toggle('active',    gw === 'PAYSTACK');
+  document.getElementById('gw-flutterwave').classList.toggle('active', gw === 'FLUTTERWAVE');
+}
+
+// ── Tab switching ────────────────────────────────────────────────────────────
+function showTab(name) {
+  ['voucher','login','buy','session'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t === name ? '' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((btn, i) => {
+    btn.classList.toggle('active', ['voucher','login','buy'].indexOf(name) === i);
+  });
+}
+
+// ── Alert helpers ─────────────────────────────────────────────────────────────
+function setAlert(container, type, icon, msg) {
+  document.getElementById(container).innerHTML =
+    `<div class="alert ${type}"><span>${icon}</span><span>${msg}</span></div>`;
+}
+function clearAlert(container) { document.getElementById(container).innerHTML = ''; }
+
+// ── Loading state ──────────────────────────────────────────────────────────
+function setLoading(spinId, btnId, loading, label) {
+  document.getElementById(spinId).style.display = loading ? 'inline-block' : 'none';
+  document.getElementById(btnId).disabled = loading;
+  if (label && !loading) document.getElementById(btnId).lastChild.textContent = label;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// VOUCHER LOGIN
+// ════════════════════════════════════════════════════════════════════════════
+async function doVoucherLogin() {
+  const code = document.getElementById('voucher-code').value.trim().toUpperCase();
+  if (!code) { setAlert('voucher-alert','error','❌','Please enter a voucher code.'); return; }
+
+  clearAlert('voucher-alert');
+  setLoading('spin-voucher', 'btn-voucher', true);
+
+  try {
+    // Step 1: Validate & activate via backend
+    const res = await fetch(`${API}/hotspot/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ code, mac: MK_MAC, ip: MK_IP }),
+    }).then(r => r.json());
+
+    if (!res.success) {
+      setAlert('voucher-alert', 'error', '❌', res.message || 'Invalid voucher code.');
+      return;
+    }
+
+    // Step 2: Store session
+    sessionId      = res.data.sessionId;
+    sessionVoucher = res.data.voucher;
+    sessionStart   = new Date();
+
+    setAlert('voucher-alert', 'success', '✅', 'Voucher accepted! Connecting...');
+
+    // Step 3: Tell MikroTik to grant firewall access
+    mikrotikGrantAccess(code, code);
+
+    // Step 4: Show session UI (after short delay for redirect)
+    setTimeout(() => showSession(sessionVoucher), 1600);
+
+  } catch (e) {
+    setAlert('voucher-alert', 'error', '❌', 'Network error. Please try again.');
+  } finally {
+    setLoading('spin-voucher', 'btn-voucher', false);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// USERNAME / PASSWORD LOGIN
+// ════════════════════════════════════════════════════════════════════════════
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  if (!username || !password) { setAlert('login-alert','error','❌','Please enter username and password.'); return; }
+
+  clearAlert('login-alert');
+  setLoading('spin-login', 'btn-login', true);
+
+  try {
+    const res = await fetch(`${API}/hotspot/login`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ username, password, mac: MK_MAC, ip: MK_IP }),
+    }).then(r => r.json());
+
+    if (!res.success) {
+      setAlert('login-alert', 'error', '❌', res.message || 'Login failed.');
+      return;
+    }
+
+    sessionId    = res.data.sessionId;
+    sessionStart = new Date();
+
+    setAlert('login-alert', 'success', '✅', 'Login successful! Connecting...');
+    mikrotikGrantAccess(username, password);
+    setTimeout(() => showSession(null, username), 1600);
+
+  } catch (e) {
+    setAlert('login-alert', 'error', '❌', 'Network error. Please try again.');
+  } finally {
+    setLoading('spin-login', 'btn-login', false);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BUY / PAYMENT
+// ════════════════════════════════════════════════════════════════════════════
+async function doBuy() {
+  const name  = document.getElementById('buy-name').value.trim();
+  const email = document.getElementById('buy-email').value.trim();
+  const phone = document.getElementById('buy-phone').value.trim();
+
+  if (!name || !email)  { setAlert('buy-alert','error','❌','Please enter your name and email address.'); return; }
+  if (!selectedPlan)    { setAlert('buy-alert','error','❌','Please select a plan first.'); return; }
+
+  clearAlert('buy-alert');
+  setLoading('spin-buy', 'btn-buy', true);
+  document.getElementById('btn-buy-label').textContent = 'Redirecting to payment...';
+
+  try {
+    const endpoint = selectedGateway === 'PAYSTACK'
+      ? `${API}/payments/paystack/init`
+      : `${API}/payments/flutterwave/init`;
+
+    const res = await fetch(endpoint, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        planId: selectedPlan.id,
+        name, email, phone,
+        // Pass MAC so auto-login can work after payment
+        mac:    MK_MAC,
+        ip:     MK_IP,
+        // Pass portal return URL so payment gateway redirects back here
+        returnUrl: `${BACKEND_URL}/portal?mac=${MK_MAC}&ip=${MK_IP}&router-ip=${MK_ROUTER_IP}`,
+      }),
+    }).then(r => r.json());
+
+    if (!res.success) {
+      setAlert('buy-alert', 'error', '❌', res.message || 'Payment initialization failed.');
+      return;
+    }
+
+    const payUrl = res.data?.authorizationUrl || res.data?.paymentLink;
+    if (payUrl) {
+      // Store MAC so we can auto-login after payment returns
+      sessionStorage.setItem('bdn_mac',      MK_MAC);
+      sessionStorage.setItem('bdn_ip',       MK_IP);
+      sessionStorage.setItem('bdn_router_ip',MK_ROUTER_IP);
+      sessionStorage.setItem('bdn_reference', res.data?.reference || '');
+      window.location.href = payUrl;
+    } else {
+      setAlert('buy-alert', 'error', '❌', 'No payment URL received. Please try again.');
+    }
+
+  } catch (e) {
+    setAlert('buy-alert', 'error', '❌', 'Network error. Please try again.');
+  } finally {
+    setLoading('spin-buy', 'btn-buy', false);
+    document.getElementById('btn-buy-label').textContent = `Pay ₦${Number(selectedPlan?.price||0).toLocaleString()} →`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUTO-LOGIN AFTER PAYMENT RETURN
+// When payment gateway redirects back to the portal, check for a reference
+// in the URL and auto-login the customer
+// ════════════════════════════════════════════════════════════════════════════
+async function checkPaymentReturn() {
+  const reference     = urlParams.get('reference') || urlParams.get('trxref');
+  const txId          = urlParams.get('transaction_id');
+  const storedRef     = sessionStorage.getItem('bdn_reference');
+  const storedMac     = sessionStorage.getItem('bdn_mac')      || MK_MAC;
+  const storedIP      = sessionStorage.getItem('bdn_ip')       || MK_IP;
+  const storedRouterIP= sessionStorage.getItem('bdn_router_ip')|| MK_ROUTER_IP;
+
+  if (!reference && !txId) return false; // Not a payment return
+
+  sessionStorage.removeItem('bdn_reference');
+
+  try {
+    let verifyRes;
+    if (txId) {
+      // Flutterwave
+      const txRef = urlParams.get('tx_ref') || storedRef;
+      verifyRes = await fetch(`${API}/payments/flutterwave/verify?transaction_id=${txId}&tx_ref=${txRef}`)
+        .then(r => r.json());
+    } else {
+      // Paystack
+      verifyRes = await fetch(`${API}/payments/paystack/verify/${reference}`)
+        .then(r => r.json());
+    }
+
+    if (verifyRes.success && verifyRes.data?.voucher) {
+      const voucher = verifyRes.data.voucher;
+      sessionVoucher = voucher;
+      sessionId      = verifyRes.data?.sessionId;
+      sessionStart   = new Date();
+
+      // Auto-login on MikroTik using the new voucher code
+      const routerIP = storedRouterIP || MK_ROUTER_IP || detectRouterIP();
+      if (routerIP) {
+        // Override MK params with stored values
+        window._mk_router_ip = routerIP;
+        window._mk_mac       = storedMac;
+      }
+
+      mikrotikGrantAccess(voucher.code, voucher.code);
+      setTimeout(() => showSession(voucher), 1600);
+      return true;
+    }
+  } catch (e) {
+    console.warn('[Portal] Payment verification failed:', e.message);
+  }
+  return false;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SESSION DISPLAY & COUNTDOWN
+// ════════════════════════════════════════════════════════════════════════════
+function showSession(voucher, username) {
+  document.querySelectorAll('.tabs').forEach(t => t.style.display = 'none');
+  document.getElementById('hero-section').style.display = 'none';
+  showTab('session');
+
+  const planName = voucher?.plan?.name || 'Standard Plan';
+  document.getElementById('stat-plan').textContent    = planName;
+  document.getElementById('stat-code').textContent    = voucher?.code || username || '—';
+  document.getElementById('stat-since').textContent   = sessionStart ? sessionStart.toLocaleTimeString() : '—';
+  document.getElementById('session-greeting').textContent =
+    `Welcome! You are connected to ${planName}. Enjoy browsing!`;
+
+  // Start countdown if voucher has expiry
+  if (voucher?.expiresAt) {
+    startCountdown(new Date(voucher.expiresAt));
+  } else {
+    document.getElementById('stat-time').textContent = 'Unlimited';
+  }
+}
+
+function startCountdown(expiresAt) {
+  if (countdownTimer) clearInterval(countdownTimer);
+
+  function tick() {
+    const remaining = expiresAt - new Date();
+    if (remaining <= 0) {
+      clearInterval(countdownTimer);
+      // Mark as expired and redirect back to portal
+      sessionStorage.setItem('bdn_expired', '1');
+      mikrotikLogout();
+      setTimeout(() => window.location.href = '/portal?error=expired', 500);
+      return;
+    }
+    const h = Math.floor(remaining / 3600000);
+    const m = Math.floor((remaining % 3600000) / 60000);
+    const s = Math.floor((remaining % 60000) / 1000);
+    document.getElementById('stat-time').textContent =
+      h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  tick();
+  countdownTimer = setInterval(tick, 1000);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LOGOUT
+// ════════════════════════════════════════════════════════════════════════════
+async function doLogout() {
+  const btn = document.getElementById('btn-logout');
+  btn.disabled = true;
+  btn.textContent = 'Disconnecting...';
+  clearInterval(countdownTimer);
+
+  try {
+    if (sessionId) {
+      await fetch(`${API}/hotspot/logout`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sessionId, mac: MK_MAC }),
+      });
+    }
+  } catch {}
+
+  // Tell MikroTik to close the session too
+  mikrotikLogout();
+
+  sessionId      = null;
+  sessionVoucher = null;
+
+  // Redirect back to portal with logout error param
+  setTimeout(() => {
+    window.location.href = '/portal?error=logout';
+  }, 600);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STARTUP
+// ════════════════════════════════════════════════════════════════════════════
+(async function startup() {
+  // Check if returning from payment
+  const isPaymentReturn = await checkPaymentReturn();
+  if (!isPaymentReturn) {
+    // Normal load
+    await init();
+  }
+})();
+</script>
+</body>
+</html>

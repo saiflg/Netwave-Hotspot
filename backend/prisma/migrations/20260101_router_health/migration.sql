@@ -1,0 +1,16 @@
+-- Add router health monitoring fields
+-- Blue Dot Networks — Phase 1 MikroTik Integration
+
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "identity"        TEXT;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "routerOSVersion" TEXT;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "cpuLoad"         INTEGER;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "memoryUsage"     INTEGER;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "totalMemory"     INTEGER;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "uptime"          TEXT;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "hotspotRunning"  BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "wanActive"       BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "internetActive"  BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "totalUsers"      INTEGER;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "activeUsers"     INTEGER;
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "connectionType"  TEXT NOT NULL DEFAULT 'PUBLIC_IP';
+ALTER TABLE "Router" ADD COLUMN IF NOT EXISTS "vpnEndpoint"     TEXT;
