@@ -1,140 +1,149 @@
 /**
- * Export Service — PDF & Excel
- * Fix 1: Remove bufferPages — caused blank PDFs
- * Fix 2: Use synchronous card drawing, proper page overflow
+ * Blue Dot Networks — Export Service
+ * Fix: stream.on('finish') ensures all bytes are flushed before resolving
  */
 
 const PDFDocument = require('pdfkit');
 const ExcelJS     = require('exceljs');
 const QRCode      = require('qrcode');
+const path        = require('path');
+const fs          = require('fs');
+
+const LOGO_PATH = path.join(__dirname, '../../uploads/logo.jpg');
 
 // ── QR PNG buffer ─────────────────────────────────────────────────────────────
-async function qrBuffer(text) {
+async function makeQR(text) {
   try {
-    return await QRCode.toBuffer(text, { width: 120, margin: 1, type: 'png' });
+    return await QRCode.toBuffer(text, { width: 110, margin: 1, type: 'png' });
   } catch { return null; }
 }
 
 // ── VOUCHER PDF ───────────────────────────────────────────────────────────────
 exports.generateVoucherPDF = async (vouchers, stream) => {
-  const BASE_URL = process.env.CAPTIVE_PORTAL_URL
+  const BASE = process.env.CAPTIVE_PORTAL_URL
     || process.env.APP_URL
     || 'http://localhost:5000';
 
-  // Pre-generate all QR buffers BEFORE opening the stream
-  const qrBuffers = await Promise.all(
+  // Pre-generate ALL QR buffers before opening PDFKit
+  const qrs = await Promise.all(
     vouchers.map(v =>
-      v.qrToken ? qrBuffer(`${BASE_URL}/auth/qr/${v.qrToken}`) : qrBuffer(v.code)
+      v.qrToken ? makeQR(`${BASE}/auth/qr/${v.qrToken}`) : makeQR(v.code)
     )
   );
 
-  return new Promise((resolve, reject) => {
-    // NOTE: NO bufferPages — that was causing blank PDFs
-    const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: true });
+  const hasLogo = fs.existsSync(LOGO_PATH);
 
-    doc.pipe(stream);
-    stream.on('error', reject);
+  return new Promise((resolve, reject) => {
+    // CRITICAL: resolve on stream 'finish', NOT on doc 'end'
+    // 'end' fires when PDFKit finishes writing — 'finish' fires when the
+    // underlying HTTP socket has actually flushed all bytes to the client
+    stream.on('finish', resolve);
+    stream.on('error',  reject);
+
+    const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: true });
     doc.on('error', reject);
-    doc.on('end', resolve);
+
+    // Pipe AFTER attaching listeners
+    doc.pipe(stream);
 
     try {
-      const PAGE_W  = doc.page.width;   // 595
-      const PAGE_H  = doc.page.height;  // 842
+      const PW       = doc.page.width;
+      const PH       = doc.page.height;
+      const MARGIN   = 28;
+      const HEADER_H = 52;
+      const CARD_W   = 250;
+      const CARD_H   = 162;
+      const COLS     = 2;
+      const GAP_X    = 12;
+      const GAP_Y    = 10;
+      const START_Y  = HEADER_H + 8;
+      const AVAIL_H  = PH - START_Y - MARGIN;
+      const ROWS_PER = Math.floor(AVAIL_H / (CARD_H + GAP_Y));
+      const PER_PAGE = ROWS_PER * COLS;
 
-      const MARGIN  = 30;
-      const CARD_W  = 248;
-      const CARD_H  = 158;
-      const COLS    = 2;
-      const GAP_X   = 14;
-      const GAP_Y   = 12;
-      const HEAD_H  = 48;  // header strip height
-      const BODY_Y  = HEAD_H + 10;  // where cards start
-
-      const STATUS_COLORS = {
+      const STATUS_COLOR = {
         UNUSED:    '#6366F1',
         ACTIVE:    '#10B981',
         EXPIRED:   '#EF4444',
         SUSPENDED: '#F59E0B',
       };
 
-      // Rows per page
-      const ROWS_PER_PAGE = Math.floor((PAGE_H - BODY_Y - MARGIN) / (CARD_H + GAP_Y));
-      const CARDS_PER_PAGE = ROWS_PER_PAGE * COLS;
-
-      // ── Draw page header ────────────────────────────────────────────
       const drawHeader = () => {
-        doc.rect(0, 0, PAGE_W, HEAD_H).fill('#6366F1');
-        doc.font('Helvetica-Bold').fontSize(15).fillColor('#ffffff').text('Blue Dot Networks — Vouchers', MARGIN, 12);
-        doc.font('Helvetica').fontSize(8).fillColor('#c7d2fe')
-          .text(`Generated: ${new Date().toLocaleString()}   Total: ${vouchers.length}`, MARGIN, 30);
+        doc.rect(0, 0, PW, HEADER_H).fill('#0f172a');
+        if (hasLogo) {
+          try { doc.image(LOGO_PATH, MARGIN, 8, { height: 36 }); } catch {}
+        }
+        const textX = hasLogo ? MARGIN + 110 : MARGIN;
+        doc.font('Helvetica-Bold').fontSize(14).fillColor('#ffffff')
+          .text('Blue Dot Networks', textX, 14);
+        doc.font('Helvetica').fontSize(8).fillColor('#94a3b8')
+          .text(
+            `Vouchers · Generated: ${new Date().toLocaleString()} · Total: ${vouchers.length}`,
+            textX, 32
+          );
       };
 
       drawHeader();
 
-      // ── Draw each card ──────────────────────────────────────────────
       vouchers.forEach((v, idx) => {
-        // New page check
-        if (idx > 0 && idx % CARDS_PER_PAGE === 0) {
+        if (idx > 0 && idx % PER_PAGE === 0) {
           doc.addPage();
           drawHeader();
         }
 
-        const posOnPage = idx % CARDS_PER_PAGE;
-        const col       = posOnPage % COLS;
-        const row       = Math.floor(posOnPage / COLS);
+        const pos = idx % PER_PAGE;
+        const col = pos % COLS;
+        const row = Math.floor(pos / COLS);
+        const x   = MARGIN + col * (CARD_W + GAP_X);
+        const y   = START_Y + row * (CARD_H + GAP_Y);
+        const bc  = STATUS_COLOR[v.status] || '#6366F1';
 
-        const x = MARGIN + col * (CARD_W + GAP_X);
-        const y = BODY_Y + row * (CARD_H + GAP_Y);
+        // Card background + border
+        doc.roundedRect(x, y, CARD_W, CARD_H, 9)
+          .fillAndStroke('#ffffff', bc);
 
-        const borderColor = STATUS_COLORS[v.status] || '#6366F1';
-
-        // ── Card border + background ──────────────────────────────────
-        doc.roundedRect(x, y, CARD_W, CARD_H, 8)
-          .fillAndStroke('#ffffff', borderColor);
-
-        // ── Top strip ─────────────────────────────────────────────────
+        // Top strip
         doc.save()
-          .roundedRect(x, y, CARD_W, 28, 8)
+          .roundedRect(x, y, CARD_W, 30, 9)
           .clip()
-          .rect(x, y, CARD_W, 28)
-          .fill('#6366F1')
+          .rect(x, y, CARD_W, 30)
+          .fill('#1e3a5f')
           .restore();
 
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#ffffff')
-          .text('Blue Dot Networks', x + 8, y + 7, { width: 150 });
-        doc.font('Helvetica').fontSize(7).fillColor('#c7d2fe')
-          .text(v.plan?.name || 'Internet Plan', x + 8, y + 17, { width: 150 });
-        doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff')
-          .text(v.status, x + CARD_W - 54, y + 11, { width: 46, align: 'right' });
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff')
+          .text('Blue Dot Networks', x + 8, y + 8, { width: 160 });
+        doc.font('Helvetica').fontSize(7).fillColor('#93c5fd')
+          .text(v.plan?.name || 'Internet Plan', x + 8, y + 19, { width: 160 });
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(bc)
+          .text(v.status, x + CARD_W - 58, y + 10, { width: 50, align: 'right' });
 
-        // ── QR code ───────────────────────────────────────────────────
-        const QR_SIZE = 82;
-        const QR_X   = x + CARD_W - QR_SIZE - 8;
-        const QR_Y   = y + 32;
+        // QR code
+        const QR_SZ = 80;
+        const QR_X  = x + CARD_W - QR_SZ - 7;
+        const QR_Y  = y + 33;
 
-        if (qrBuffers[idx]) {
-          // Draw white background for QR
-          doc.rect(QR_X - 2, QR_Y - 2, QR_SIZE + 4, QR_SIZE + 4).fill('#ffffff');
-          doc.image(qrBuffers[idx], QR_X, QR_Y, { width: QR_SIZE, height: QR_SIZE });
+        if (qrs[idx]) {
+          doc.rect(QR_X - 2, QR_Y - 2, QR_SZ + 4, QR_SZ + 4).fill('#ffffff');
+          doc.image(qrs[idx], QR_X, QR_Y, { width: QR_SZ, height: QR_SZ });
         } else {
-          doc.rect(QR_X, QR_Y, QR_SIZE, QR_SIZE).fillAndStroke('#f8fafc', '#e2e8f0');
-          doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
-            .text('QR not available', QR_X, QR_Y + QR_SIZE / 2 - 3, { width: QR_SIZE, align: 'center' });
+          doc.rect(QR_X, QR_Y, QR_SZ, QR_SZ).fillAndStroke('#f1f5f9', '#e2e8f0');
+          doc.font('Helvetica').fontSize(6.5).fillColor('#94a3b8')
+            .text('QR unavailable', QR_X, QR_Y + 36, { width: QR_SZ, align: 'center' });
         }
 
         doc.font('Helvetica').fontSize(6).fillColor('#94a3b8')
-          .text('Scan to connect', QR_X, QR_Y + QR_SIZE + 2, { width: QR_SIZE, align: 'center' });
+          .text('Scan to connect', QR_X, QR_Y + QR_SZ + 2, { width: QR_SZ, align: 'center' });
 
-        // ── Voucher code ──────────────────────────────────────────────
-        const LEFT_W = CARD_W - QR_SIZE - 24;
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#1e293b')
-          .text(v.code, x + 8, y + 34, { width: LEFT_W, characterSpacing: 1 });
+        // Voucher code
+        const LW = CARD_W - QR_SZ - 22;
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#1e293b')
+          .text(v.code, x + 7, y + 35, { width: LW, characterSpacing: 1.5 });
 
-        // Divider
-        doc.moveTo(x + 8, y + 55).lineTo(QR_X - 6, y + 55)
+        doc.moveTo(x + 7, y + 55)
+          .lineTo(QR_X - 6, y + 55)
           .strokeColor('#e2e8f0').lineWidth(0.5).stroke();
 
-        // ── Details ───────────────────────────────────────────────────
+        // Plan details
         const details = [
           ['Duration', v.plan?.validityLabel || '—'],
           ['Speed',    `${v.plan?.downloadSpeed || '?'}/${v.plan?.uploadSpeed || '?'} Mbps`],
@@ -144,15 +153,15 @@ exports.generateVoucherPDF = async (vouchers, stream) => {
 
         details.forEach(([lbl, val], di) => {
           const dy = y + 60 + di * 18;
-          doc.font('Helvetica').fontSize(7).fillColor('#94a3b8')
-            .text(lbl + ':', x + 8, dy, { width: 44 });
+          doc.font('Helvetica').fontSize(6.5).fillColor('#94a3b8')
+            .text(lbl + ':', x + 7, dy, { width: 42 });
           doc.font('Helvetica-Bold').fontSize(8).fillColor('#1e293b')
-            .text(val, x + 54, dy, { width: LEFT_W - 48 });
+            .text(val, x + 52, dy, { width: LW - 46 });
         });
 
-        // ── Footer ────────────────────────────────────────────────────
-        const FY = y + CARD_H - 16;
-        doc.rect(x, FY, CARD_W, 16).fill('#f8fafc');
+        // Footer bar
+        const FY = y + CARD_H - 17;
+        doc.rect(x, FY, CARD_W, 17).fill('#f8fafc');
         doc.font('Helvetica').fontSize(5.5).fillColor('#94a3b8')
           .text(`ID: ${(v.id || '').slice(0, 18).toUpperCase()}`, x + 6, FY + 5, { width: CARD_W / 2 - 8 });
         doc.font('Helvetica').fontSize(5.5).fillColor('#94a3b8')
@@ -163,7 +172,9 @@ exports.generateVoucherPDF = async (vouchers, stream) => {
           );
       });
 
+      // End the PDF — 'finish' event on stream will resolve the Promise
       doc.end();
+
     } catch (err) {
       reject(err);
     }
@@ -172,45 +183,50 @@ exports.generateVoucherPDF = async (vouchers, stream) => {
 
 // ── VOUCHER EXCEL ─────────────────────────────────────────────────────────────
 exports.generateVoucherExcel = async (vouchers, stream) => {
-  const workbook   = new ExcelJS.Workbook();
-  workbook.creator = 'Blue Dot Networks';
-  workbook.created = new Date();
+  const BASE = process.env.CAPTIVE_PORTAL_URL || process.env.APP_URL || '';
 
-  const sheet = workbook.addWorksheet('Vouchers', {
+  const wb  = new ExcelJS.Workbook();
+  wb.creator = 'Blue Dot Networks';
+  wb.created = new Date();
+
+  const ws = wb.addWorksheet('Vouchers', {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true },
     views: [{ state: 'frozen', ySplit: 1 }],
   });
 
-  sheet.columns = [
+  ws.columns = [
     { header: 'Code',         key: 'code',        width: 20 },
     { header: 'Plan',         key: 'plan',        width: 16 },
     { header: 'Price (₦)',    key: 'price',       width: 12 },
     { header: 'Duration',     key: 'duration',    width: 14 },
-    { header: 'Speed',        key: 'speed',       width: 16 },
+    { header: 'Speed',        key: 'speed',       width: 18 },
     { header: 'Data',         key: 'data',        width: 12 },
-    { header: 'Status',       key: 'status',      width: 12 },
+    { header: 'Status',       key: 'status',      width: 13 },
     { header: 'Activated At', key: 'activatedAt', width: 22 },
     { header: 'Expires At',   key: 'expiresAt',   width: 22 },
-    { header: 'QR Link',      key: 'qrLink',      width: 50 },
+    { header: 'QR Link',      key: 'qrLink',      width: 55 },
     { header: 'Created At',   key: 'createdAt',   width: 22 },
-    { header: 'Batch ID',     key: 'batchId',     width: 24 },
+    { header: 'Batch',        key: 'batchId',     width: 24 },
   ];
 
-  // Header styling
-  sheet.getRow(1).height = 26;
-  sheet.getRow(1).eachCell(cell => {
-    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6366F1' } };
+  // Header row styling
+  ws.getRow(1).height = 28;
+  ws.getRow(1).eachCell(cell => {
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1e3a5f' } };
     cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
   });
 
-  const STATUS_COLORS = { UNUSED:'FF6366F1', ACTIVE:'FF10B981', EXPIRED:'FFEF4444', SUSPENDED:'FFF59E0B' };
-  const BASE_URL = process.env.CAPTIVE_PORTAL_URL || process.env.APP_URL || '';
+  const SC = {
+    UNUSED:    'FF6366F1',
+    ACTIVE:    'FF10B981',
+    EXPIRED:   'FFEF4444',
+    SUSPENDED: 'FFF59E0B',
+  };
 
   vouchers.forEach((v, i) => {
-    const qrLink = v.qrToken ? `${BASE_URL}/auth/qr/${v.qrToken}` : '';
-
-    const row = sheet.addRow({
+    const qrLink = v.qrToken ? `${BASE}/auth/qr/${v.qrToken}` : '';
+    const row = ws.addRow({
       code:        v.code,
       plan:        v.plan?.name          || '—',
       price:       Number(v.price)       || 0,
@@ -227,102 +243,110 @@ exports.generateVoucherExcel = async (vouchers, stream) => {
 
     row.height = 20;
 
-    // Alternate row shade
     if (i % 2 === 0) {
-      row.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      row.eachCell(c => {
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
       });
     }
 
-    // Code cell styling
-    row.getCell('code').font    = { bold: true, color: { argb: 'FF6366F1' }, name: 'Courier New' };
+    row.getCell('code').font    = { bold: true, color: { argb: 'FF1e3a5f' }, name: 'Courier New' };
     row.getCell('price').numFmt = '#,##0.00';
 
-    // Status color
-    const sc = STATUS_COLORS[v.status];
+    const sc = SC[v.status];
     if (sc) row.getCell('status').font = { bold: true, color: { argb: sc } };
 
-    // QR link as hyperlink
     if (qrLink) {
       row.getCell('qrLink').value = { text: qrLink, hyperlink: qrLink };
       row.getCell('qrLink').font  = { color: { argb: 'FF6366F1' }, underline: true, size: 9 };
     }
 
-    // Borders
-    row.eachCell(cell => {
-      cell.border    = { top:{ style:'thin', color:{ argb:'FFE2E8F0' } }, bottom:{ style:'thin', color:{ argb:'FFE2E8F0' } }, left:{ style:'thin', color:{ argb:'FFE2E8F0' } }, right:{ style:'thin', color:{ argb:'FFE2E8F0' } } };
-      cell.alignment = { vertical: 'middle' };
+    row.eachCell(c => {
+      c.border = {
+        top:    { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left:   { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right:  { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      c.alignment = { vertical: 'middle' };
     });
   });
 
-  sheet.autoFilter = {
+  ws.autoFilter = {
     from: { row: 1, column: 1 },
-    to:   { row: 1, column: sheet.columns.length },
+    to:   { row: 1, column: ws.columns.length },
   };
 
-  await workbook.xlsx.write(stream);
+  // ExcelJS writes and closes the stream internally
+  await wb.xlsx.write(stream);
 };
 
 // ── REPORT PDF ────────────────────────────────────────────────────────────────
 exports.generateReportPDF = (data, stream) => {
   return new Promise((resolve, reject) => {
+    // Resolve when stream finishes, not when doc ends
+    stream.on('finish', resolve);
+    stream.on('error',  reject);
+
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    doc.pipe(stream);
-    stream.on('error', reject);
     doc.on('error', reject);
-    doc.on('end', resolve);
+    doc.pipe(stream);
 
     try {
-      // Header
-      doc.rect(0, 0, doc.page.width, 60).fill('#6366F1');
-      doc.font('Helvetica-Bold').fontSize(22).fillColor('#ffffff').text('Blue Dot Networks', 50, 14);
-      doc.font('Helvetica').fontSize(12).fillColor('#c7d2fe').text(data.title || 'Report', 50, 38);
+      const hasLogo = fs.existsSync(LOGO_PATH);
 
-      let y = 80;
-      doc.font('Helvetica').fontSize(9).fillColor('#64748b').text(`Generated: ${new Date().toLocaleString()}`, 50, y);
-      y += 18;
+      doc.rect(0, 0, doc.page.width, 65).fill('#0f172a');
+      if (hasLogo) {
+        try { doc.image(LOGO_PATH, 50, 10, { height: 44 }); } catch {}
+      }
+      doc.font('Helvetica-Bold').fontSize(18).fillColor('#ffffff').text('Blue Dot Networks', 130, 16);
+      doc.font('Helvetica').fontSize(10).fillColor('#93c5fd').text(data.title || 'Report', 130, 38);
+
+      let y = 85;
+      doc.font('Helvetica').fontSize(9).fillColor('#64748b')
+        .text(`Generated: ${new Date().toLocaleString()}`, 50, y);
+      y += 16;
       doc.moveTo(50, y).lineTo(545, y).strokeColor('#e2e8f0').lineWidth(1).stroke();
       y += 14;
 
-      // Summary stats
       if (data.stats) {
         doc.font('Helvetica-Bold').fontSize(13).fillColor('#1e293b').text('Summary', 50, y);
         y += 18;
         Object.entries(data.stats).forEach(([k, v], i) => {
-          const bx = 50 + (i % 2) * 248;
-          const by = y + Math.floor(i / 2) * 46;
-          doc.roundedRect(bx, by, 238, 38, 6).fillAndStroke('#f8fafc', '#e2e8f0');
-          doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(k, bx + 10, by + 6);
-          doc.font('Helvetica-Bold').fontSize(14).fillColor('#1e293b').text(String(v), bx + 10, by + 16);
+          const bx = 50 + (i % 2) * 250;
+          const by = y + Math.floor(i / 2) * 48;
+          doc.roundedRect(bx, by, 240, 40, 6).fillAndStroke('#f8fafc', '#e2e8f0');
+          doc.font('Helvetica').fontSize(8).fillColor('#94a3b8').text(k, bx + 10, by + 7);
+          doc.font('Helvetica-Bold').fontSize(14).fillColor('#1e3a5f').text(String(v), bx + 10, by + 18);
         });
-        y += Math.ceil(Object.keys(data.stats).length / 2) * 46 + 16;
+        y += Math.ceil(Object.keys(data.stats).length / 2) * 48 + 16;
       }
 
-      // Table
       if (data.rows?.length) {
         if (y > 650) { doc.addPage(); y = 50; }
         doc.font('Helvetica-Bold').fontSize(13).fillColor('#1e293b').text('Details', 50, y);
         y += 18;
         const cols = Object.keys(data.rows[0]);
-        const colW = Math.floor(495 / cols.length);
-        doc.rect(50, y, 495, 20).fill('#6366F1');
+        const cw   = Math.floor(495 / cols.length);
+        doc.rect(50, y, 495, 22).fill('#1e3a5f');
         cols.forEach((c, ci) => {
           doc.font('Helvetica-Bold').fontSize(8).fillColor('#fff')
-            .text(c.toUpperCase(), 55 + ci * colW, y + 6, { width: colW - 4 });
+            .text(c.toUpperCase(), 55 + ci * cw, y + 7, { width: cw - 4 });
         });
-        y += 20;
+        y += 22;
         data.rows.forEach((row, ri) => {
           if (y > 730) { doc.addPage(); y = 50; }
           if (ri % 2 === 0) doc.rect(50, y, 495, 18).fill('#f8fafc');
           Object.values(row).forEach((val, ci) => {
             doc.font('Helvetica').fontSize(8).fillColor('#1e293b')
-              .text(String(val || '—'), 55 + ci * colW, y + 5, { width: colW - 4, ellipsis: true });
+              .text(String(val || '—'), 55 + ci * cw, y + 5, { width: cw - 4, ellipsis: true });
           });
           y += 18;
         });
       }
 
       doc.end();
-    } catch (err) { reject(err); }
+    } catch (err) {
+      reject(err);
+    }
   });
 };

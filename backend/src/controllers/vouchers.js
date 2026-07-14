@@ -309,8 +309,18 @@ exports.exportPDF = async (req, res, next) => {
     res.setHeader('Content-Type',        'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control',       'no-cache');
+    res.setHeader('Transfer-Encoding',   'chunked');
 
-    await generateVoucherPDF(vouchers, res);
+    // Wait for BOTH the PDF generation AND the HTTP response stream to finish
+    await new Promise(async (resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error',  reject);
+      try {
+        await generateVoucherPDF(vouchers, res);
+      } catch (err) {
+        reject(err);
+      }
+    });
   } catch (e) { next(e); }
 };
 
@@ -338,7 +348,16 @@ exports.exportExcel = async (req, res, next) => {
     res.setHeader('Content-Type',        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control',       'no-cache');
+    res.setHeader('Transfer-Encoding',   'chunked');
 
-    await generateVoucherExcel(vouchers, res);
+    await new Promise(async (resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error',  reject);
+      try {
+        await generateVoucherExcel(vouchers, res);
+      } catch (err) {
+        reject(err);
+      }
+    });
   } catch (e) { next(e); }
 };

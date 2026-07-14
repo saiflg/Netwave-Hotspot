@@ -34,23 +34,52 @@ export async function downloadBlob(path, filename) {
   const url   = path.startsWith('http') ? path : `${API_BASE}${path}`;
 
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
+    method:  'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: '*/*',
+    },
   });
 
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.message || `Download failed (${res.status})`);
+  if (res.status === 401) {
+    throw new Error('Session expired. Please log in again.');
   }
 
-  const blob      = await res.blob();
+  if (!res.ok) {
+    // Try to parse error as JSON, fall back to status text
+    let message = `Download failed (${res.status})`;
+    try {
+      const ct = res.headers.get('Content-Type') || '';
+      if (ct.includes('application/json')) {
+        const json = await res.json();
+        message = json.message || message;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+
+  // Read full response into blob
+  const blob = await res.blob();
+
+  // Verify blob has content
+  if (blob.size === 0) {
+    throw new Error('Downloaded file is empty. Please try again.');
+  }
+
+  // Create download link and click it
   const objectUrl = URL.createObjectURL(blob);
   const a         = document.createElement('a');
   a.href          = objectUrl;
   a.download      = filename;
+  a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(objectUrl);
+
+  // Cleanup after short delay
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  }, 1000);
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────

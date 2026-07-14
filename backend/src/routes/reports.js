@@ -41,8 +41,13 @@ router.get('/export/pdf', async (req, res, next) => {
     res.setHeader('Content-Type',        'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="report-${Date.now()}.pdf"`);
     res.setHeader('Cache-Control',       'no-cache');
+    res.setHeader('Transfer-Encoding',   'chunked');
 
-    await generateReportPDF({
+    await new Promise(async (resolve, reject) => {
+      res.on('finish', resolve);
+      res.on('error',  reject);
+      try {
+        await generateReportPDF({
       title: `Revenue Report — ${from || 'All time'} to ${to || 'Now'}`,
       stats: {
         'Total Revenue': `₦${(revenue._sum.amount || 0).toLocaleString()}`,
@@ -57,6 +62,8 @@ router.get('/export/pdf', async (req, res, next) => {
         Date:      p.paidAt ? new Date(p.paidAt).toLocaleDateString() : '—',
       })),
     }, res);
+      } catch (err) { reject(err); }
+    });
   } catch (e) { next(e); }
 });
 
