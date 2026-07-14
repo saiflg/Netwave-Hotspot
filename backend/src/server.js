@@ -40,6 +40,9 @@ const activityRoutes   = require('./routes/activity');
 
 const app = express();
 
+// ── Trust proxy (required on Render, Heroku, Railway — behind load balancer)
+app.set('trust proxy', 1);
+
 // ── CORS — allow Vercel frontend + Render backend + localhost ─────────────────
 const allowedOrigins = [
   // Production — set these in Render environment variables
