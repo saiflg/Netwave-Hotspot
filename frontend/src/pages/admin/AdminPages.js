@@ -1,7 +1,7 @@
 // ── Shared styles ────────────────────────────────────────────────────────────
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { routersAPI, plansAPI, usersAPI, sessionsAPI, paymentsAPI, reportsAPI, ticketsAPI, announcAPI, downloadBlob } from '../../utils/api';
+import { routersAPI, plansAPI, usersAPI, sessionsAPI, paymentsAPI, reportsAPI, ticketsAPI, announcAPI, downloadBlob, PUBLIC_API } from '../../utils/api';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
@@ -356,7 +356,7 @@ export function Reports() {
       if (range.from) params.set('from', range.from);
       if (range.to)   params.set('to',   range.to);
       await downloadBlob(
-        `/reports/export/pdf?${params.toString()}`,
+        `${PUBLIC_API}/reports/export/pdf?${params.toString()}`,
         `report-${range.from || 'all'}-to-${range.to || 'now'}.pdf`
       );
       toast.success('Report downloaded!');

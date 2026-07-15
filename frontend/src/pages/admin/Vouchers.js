@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
-import { vouchersAPI, plansAPI, routersAPI } from '../../utils/api';
+import { vouchersAPI, plansAPI, routersAPI, PUBLIC_API } from '../../utils/api';
 import toast from 'react-hot-toast';
 import QRCode from 'react-qr-code';
 
@@ -156,7 +156,8 @@ export default function Vouchers() {
     if (selectedIds.length > 0) params.set('ids', selectedIds.join(','));
     if (filters.status)         params.set('status', filters.status);
 
-    const base      = type === 'pdf' ? '/api/v1/vouchers/export/pdf' : '/api/v1/vouchers/export/excel';
+    // MUST use absolute URL — relative URLs hit Vercel, not the Render backend
+    const base      = type === 'pdf' ? `${PUBLIC_API}/vouchers/export/pdf` : `${PUBLIC_API}/vouchers/export/excel`;
     const url       = `${base}?${params.toString()}`;
     const filename  = type === 'pdf'
       ? `vouchers-${Date.now()}.pdf`
