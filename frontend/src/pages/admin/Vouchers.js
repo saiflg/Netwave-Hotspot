@@ -95,6 +95,8 @@ export default function Vouchers() {
   const [selected, setSelected] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [exporting, setExporting]     = useState('');
+  const [pdfCount,  setPdfCount]      = useState(50);   // max vouchers in PDF
+  const [showPdfOpts, setShowPdfOpts] = useState(false);
 
   const [form, setForm] = useState({
     planId: '', routerId: '', prefix: '', customCode: '',
@@ -150,11 +152,17 @@ export default function Vouchers() {
   const handleExport = async (type) => {
     const token = localStorage.getItem('bdn_token');
     if (!token) { toast.error('Please log in to export.'); return; }
+    setShowPdfOpts(false);
 
     // Build query string
     const params = new URLSearchParams();
-    if (selectedIds.length > 0) params.set('ids', selectedIds.join(','));
-    if (filters.status)         params.set('status', filters.status);
+    if (selectedIds.length > 0) {
+      params.set('ids', selectedIds.join(','));
+    } else {
+      // Respect the chosen PDF count limit
+      if (type === 'pdf') params.set('limit', String(pdfCount));
+      if (filters.status)  params.set('status', filters.status);
+    }
 
     // MUST use absolute URL — relative URLs hit Vercel, not the Render backend
     const base      = type === 'pdf' ? `${PUBLIC_API}/vouchers/export/pdf` : `${PUBLIC_API}/vouchers/export/excel`;
@@ -176,6 +184,14 @@ export default function Vouchers() {
 
   const selectedPlanInfo = bulk.planId ? plans.find(p => p.id === bulk.planId) : null;
 
+  // Close options dropdown when clicking outside
+  React.useEffect(() => {
+    if (!showPdfOpts) return;
+    const close = () => setShowPdfOpts(false);
+    document.addEventListener('click', close, { once: true });
+    return () => document.removeEventListener('click', close);
+  }, [showPdfOpts]);
+
   return (
     <div>
       {/* Header */}
@@ -185,10 +201,53 @@ export default function Vouchers() {
           <p style={{ color: '#64748B', margin: 0, fontSize: 13 }}>{pagination.total || 0} vouchers total</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button style={{ ...S.btn('ghost'), opacity: exporting === 'pdf' ? 0.6 : 1 }}
-            onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
-            {exporting === 'pdf' ? '⏳ Generating...' : '📄 Export PDF'}
-          </button>
+          <div style={{ position: 'relative', display: 'inline-flex' }}>
+            <button style={{ ...S.btn('ghost'), opacity: exporting === 'pdf' ? 0.6 : 1, borderRadius: '8px 0 0 8px' }}
+              onClick={() => handleExport('pdf')} disabled={exporting === 'pdf'}>
+              {exporting === 'pdf' ? '⏳ Generating...' : '📄 Export PDF'}
+            </button>
+            <button
+              style={{ ...S.btn('ghost'), borderLeft: '1px solid #334155', borderRadius: '0 8px 8px 0', padding: '10px 10px' }}
+              onClick={() => setShowPdfOpts(v => !v)}
+              title="PDF options">
+              ▾
+            </button>
+            {showPdfOpts && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#1E1E2E', border: '1px solid #334155', borderRadius: 10, padding: 16, zIndex: 200, minWidth: 220, boxShadow: '0 8px 32px rgba(0,0,0,.4)' }}>
+                <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>PDF Options</div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', color: '#94A3B8', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                    Max vouchers per PDF
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 6 }}>
+                    {[10, 20, 30, 50, 100, 200].map(n => (
+                      <button key={n}
+                        onClick={() => { setPdfCount(n); setShowPdfOpts(false); }}
+                        style={{
+                          border: `1px solid ${pdfCount === n ? '#6366F1' : '#2D2D3F'}`,
+                          background: pdfCount === n ? '#6366F122' : 'transparent',
+                          color: pdfCount === n ? '#A5B4FC' : '#64748B',
+                          borderRadius: 6, padding: '6px 4px', fontSize: 12,
+                          fontWeight: pdfCount === n ? 800 : 400, cursor: 'pointer',
+                        }}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ color: '#64748B', fontSize: 11, marginTop: 8 }}>
+                    Currently: <strong style={{ color: '#A5B4FC' }}>{pdfCount}</strong> vouchers per PDF
+                    {selectedIds.length > 0 && <span> (overridden by selection: {selectedIds.length})</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setShowPdfOpts(false); handleExport('pdf'); }}
+                  disabled={exporting === 'pdf'}
+                  style={{ ...S.btn(), width: '100%', justifyContent: 'center', fontSize: 13 }}>
+                  📄 Export {selectedIds.length > 0 ? selectedIds.length : pdfCount} Vouchers
+                </button>
+              </div>
+            )}
+          </div>
           <button style={{ ...S.btn('ghost'), opacity: exporting === 'excel' ? 0.6 : 1 }}
             onClick={() => handleExport('excel')} disabled={exporting === 'excel'}>
             {exporting === 'excel' ? '⏳ Generating...' : '📊 Export Excel'}

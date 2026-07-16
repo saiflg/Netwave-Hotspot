@@ -288,7 +288,14 @@ exports.deleteVoucher = async (req, res, next) => {
 // ─── EXPORT PDF ───────────────────────────────────────────────────────────────
 exports.exportPDF = async (req, res, next) => {
   try {
-    const { batchId, ids, status } = req.query;
+    const { batchId, ids, status, limit } = req.query;
+
+    // If specific IDs are selected, export those (ignores limit)
+    // Otherwise respect the limit chosen by admin (default 50, max 500)
+    const maxCount = ids
+      ? ids.split(',').length
+      : Math.min(parseInt(limit) || 50, 500);
+
     const where = {};
     if (batchId) where.batchId = batchId;
     if (ids)     where.id      = { in: ids.split(',') };
@@ -297,7 +304,7 @@ exports.exportPDF = async (req, res, next) => {
     const vouchers = await prisma.voucher.findMany({
       where,
       include: { plan: true },
-      take:    500,
+      take:    maxCount,
       orderBy: { createdAt: 'desc' },
     });
 
