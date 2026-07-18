@@ -184,16 +184,8 @@ export default function Vouchers() {
 
   const selectedPlanInfo = bulk.planId ? plans.find(p => p.id === bulk.planId) : null;
 
-  // Close options dropdown when clicking outside
-  React.useEffect(() => {
-    if (!showPdfOpts) return;
-    const close = () => setShowPdfOpts(false);
-    document.addEventListener('click', close, { once: true });
-    return () => document.removeEventListener('click', close);
-  }, [showPdfOpts]);
-
   return (
-    <div>
+    <div onClick={() => showPdfOpts && setShowPdfOpts(false)}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
@@ -207,13 +199,15 @@ export default function Vouchers() {
               {exporting === 'pdf' ? '⏳ Generating...' : '📄 Export PDF'}
             </button>
             <button
-              style={{ ...S.btn('ghost'), borderLeft: '1px solid #334155', borderRadius: '0 8px 8px 0', padding: '10px 10px' }}
-              onClick={() => setShowPdfOpts(v => !v)}
-              title="PDF options">
-              ▾
+              style={{ ...S.btn('ghost'), borderLeft: '1px solid #334155', borderRadius: '0 8px 8px 0', padding: '10px 14px', fontSize: 16 }}
+              onClick={e => { e.stopPropagation(); setShowPdfOpts(v => !v); }}
+              title="PDF count options">
+              {showPdfOpts ? '▴' : '▾'}
             </button>
             {showPdfOpts && (
-              <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#1E1E2E', border: '1px solid #334155', borderRadius: 10, padding: 16, zIndex: 200, minWidth: 220, boxShadow: '0 8px 32px rgba(0,0,0,.4)' }}>
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: '#1E1E2E', border: '1px solid #334155', borderRadius: 10, padding: 16, zIndex: 200, minWidth: 220, boxShadow: '0 8px 32px rgba(0,0,0,.4)' }}>
                 <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, textTransform: 'uppercase', marginBottom: 10 }}>PDF Options</div>
                 <div style={{ marginBottom: 12 }}>
                   <label style={{ display: 'block', color: '#94A3B8', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>

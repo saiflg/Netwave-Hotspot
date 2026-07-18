@@ -238,9 +238,26 @@ exports.updateEmail = async (req, res, next) => {
 
 // ─── SEND TEST EMAIL ──────────────────────────────────────────────────────────
 exports.sendTestEmail = async (req, res, next) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ success: false, message: 'Recipient email (to) is required.' });
+
   try {
-    const { to } = req.body;
-    if (!to) return res.status(400).json({ success: false, message: 'Recipient email (to) is required.' });
+    // First verify the SMTP settings exist in DB
+    const { prisma } = require('../config/database');
+    const rows = await prisma.setting.findMany({ where: { group: 'mail' } });
+    const cfg  = rows.reduce((a, r) => { a[r.key] = r.value; return a; }, {});
+
+    // Give clear error if settings not saved yet
+    if (!cfg.smtp_host || !cfg.smtp_user || !cfg.smtp_pass) {
+      return res.status(400).json({
+        success: false,
+        message: '❌ SMTP not configured. Please fill in all fields (Host, Port, Username, Password) and click Save Mail Settings first.',
+        hint:    'Do not click Send Test Email before saving your settings.',
+      });
+    }
+
+    // Show what settings are being used (helps with debugging)
+    logger.info(`[TestEmail] Testing SMTP: host=${cfg.smtp_host} port=${cfg.smtp_port} user=${cfg.smtp_user} ssl=${cfg.smtp_secure}`);
 
     await email.sendEmail({
       to,
@@ -249,31 +266,62 @@ exports.sendTestEmail = async (req, res, next) => {
         <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:500px;margin:0 auto">
           <div style="background:linear-gradient(135deg,#6366F1,#8B5CF6);padding:28px;border-radius:12px 12px 0 0;text-align:center">
             <div style="font-size:36px">📬</div>
-            <h2 style="color:#fff;margin:8px 0 0">Test Email</h2>
+            <h2 style="color:#fff;margin:8px 0 0">SMTP Test Successful</h2>
           </div>
           <div style="background:#f8fafc;padding:28px;border-radius:0 0 12px 12px">
-            <p style="color:#1e293b;font-size:16px">✅ <strong>Your SMTP configuration is working correctly!</strong></p>
-            <p style="color:#64748b;font-size:14px">Emails will be sent from your Blue Dot Networks system for:</p>
-            <ul style="color:#64748b;font-size:14px;line-height:2">
-              <li>📧 Registration & email verification</li>
-              <li>🔑 Password reset links</li>
-              <li>🧾 Payment receipts</li>
-              <li>🎟️ Voucher purchase confirmations</li>
-              <li>⚠️ Voucher expiry warnings</li>
-              <li>🎫 Support ticket updates</li>
-            </ul>
+            <p style="color:#1e293b;font-size:16px">✅ <strong>Your SMTP is working correctly!</strong></p>
+            <table style="font-size:13px;color:#64748b;margin-top:16px;width:100%">
+              <tr><td style="padding:4px 0"><strong>Host:</strong></td><td>${cfg.smtp_host}</td></tr>
+              <tr><td style="padding:4px 0"><strong>Port:</strong></td><td>${cfg.smtp_port}</td></tr>
+              <tr><td style="padding:4px 0"><strong>SSL:</strong></td><td>${cfg.smtp_secure === 'true' ? 'Yes (port 465)' : 'No (port 587 STARTTLS)'}</td></tr>
+              <tr><td style="padding:4px 0"><strong>User:</strong></td><td>${cfg.smtp_user}</td></tr>
+            </table>
             <p style="color:#94a3b8;font-size:12px;margin-top:20px">Sent at: ${new Date().toLocaleString()}</p>
           </div>
         </div>`,
     });
 
-    res.json({ success: true, message: `✅ Test email sent to ${to}. Check your inbox (and spam folder).` });
+    res.json({
+      success: true,
+      message: `✅ Test email sent successfully to ${to}. Check your inbox and spam folder.`,
+    });
+
   } catch (error) {
-    // Return friendly error message instead of crashing
+    // Parse the error to give a useful diagnosis
+    const msg = error.message || '';
+    let diagnosis = '';
+    let fix = '';
+
+    if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
+      diagnosis = 'Connection timed out — cannot reach the SMTP server.';
+      fix = 'Check: (1) SMTP host is spelled correctly e.g. smtp.gmail.com — (2) Port is correct: 587 for SSL=No, 465 for SSL=Yes — (3) You are not using port 25 (blocked by Render)';
+    } else if (msg.includes('ECONNREFUSED')) {
+      diagnosis = 'Connection refused — wrong port or host.';
+      fix = 'Use port 587 with SSL=No, or port 465 with SSL=Yes. Check the hostname.';
+    } else if (msg.includes('535') || msg.includes('Authentication') || msg.includes('Invalid login') || msg.includes('Username and Password')) {
+      diagnosis = 'Authentication failed — wrong username or password.';
+      fix = 'For Gmail: you must use an App Password (16 characters), NOT your regular Gmail password. Go to Google Account → Security → 2-Step Verification → App Passwords → Generate.';
+    } else if (msg.includes('534') || msg.includes('less secure')) {
+      diagnosis = 'Gmail is blocking this login method.';
+      fix = 'You must use a Gmail App Password. Regular passwords no longer work. Go to myaccount.google.com → Security → App Passwords.';
+    } else if (msg.includes('certificate') || msg.includes('self signed') || msg.includes('SSL')) {
+      diagnosis = 'SSL/TLS certificate error.';
+      fix = 'If using port 587 set SSL to No. If using port 465 set SSL to Yes. They cannot be mixed.';
+    } else if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+      diagnosis = 'SMTP hostname not found.';
+      fix = 'Check the SMTP host field. For Gmail it must be exactly: smtp.gmail.com';
+    } else {
+      diagnosis = msg;
+      fix = 'Double-check all fields: host, port, SSL setting, username (full email), and password.';
+    }
+
+    logger.error(`[TestEmail] SMTP test failed: ${msg}`);
+
     res.status(500).json({
-      success: false,
-      message: `❌ SMTP Error: ${error.message}`,
-      hint: 'Check your mail settings in Admin → My Profile → Mail/SMTP Settings',
+      success:   false,
+      message:   `❌ ${diagnosis}`,
+      fix,
+      raw_error: msg,
     });
   }
 };

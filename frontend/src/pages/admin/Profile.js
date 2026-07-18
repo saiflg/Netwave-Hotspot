@@ -127,19 +127,24 @@ export default function AdminProfile() {
   };
 
   const sendTestMail = async () => {
-    if (!testMailTo) { toast.error('Enter a test email address'); return; }
+    if (!testMailTo) { toast.error('Enter a recipient email address'); return; }
     setTestingMail(true);
+    setTestResult(null);
     try {
       const token = localStorage.getItem('bdn_token');
-      const res = await fetch(`${process.env.REACT_APP_API_URL || '/api/v1'}/auth/test-email`, {
-        method: 'POST',
+      const res   = await fetch(`${process.env.REACT_APP_API_URL || '/api/v1'}/auth/test-email`, {
+        method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ to: testMailTo }),
+        body:    JSON.stringify({ to: testMailTo }),
       }).then(r => r.json());
-      if (res.success) toast.success('Test email sent! Check your inbox.');
-      else toast.error(res.message || 'Failed to send test email');
-    } catch { toast.error('Could not send test email'); }
-    finally { setTestingMail(false); }
+
+      setTestResult(res);
+      if (res.success) toast.success('✅ Test email sent! Check your inbox.');
+      else             toast.error('❌ SMTP failed — see details below');
+    } catch (e) {
+      setTestResult({ success: false, message: 'Network error — could not reach backend.', fix: 'Check your internet connection and try again.' });
+      toast.error('Network error');
+    } finally { setTestingMail(false); }
   };
 
   const p = (setter) => (k) => (e) => setter(prev => ({ ...prev, [k]: e.target.value }));
@@ -238,11 +243,37 @@ export default function AdminProfile() {
 
           {/* SMTP / Email Settings */}
           <SectionCard icon="📬" title="Mail / SMTP Settings">
+            {/* Quick reference */}
+            <div style={{ background: '#0D0D1A', borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 12 }}>
+              <div style={{ color: '#A5B4FC', fontWeight: 700, marginBottom: 8 }}>📋 Quick Settings Reference</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[
+                  { provider: 'Gmail',       host: 'smtp.gmail.com',        port: '587', ssl: 'No',  note: 'Use App Password' },
+                  { provider: 'Gmail (SSL)', host: 'smtp.gmail.com',        port: '465', ssl: 'Yes', note: 'Use App Password' },
+                  { provider: 'Brevo',       host: 'smtp-relay.brevo.com',  port: '587', ssl: 'No',  note: 'Free 300/day' },
+                  { provider: 'Zoho',        host: 'smtp.zoho.com',         port: '587', ssl: 'No',  note: 'Free 1 user' },
+                ].map(r => (
+                  <div key={r.provider} style={{ background: '#12121E', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
+                    onClick={() => {
+                      setSmtp(s => ({ ...s, smtp_host: r.host, smtp_port: r.port, smtp_secure: r.ssl === 'Yes' ? 'true' : 'false' }));
+                      toast.success(`${r.provider} settings applied — enter your username and password`);
+                    }}>
+                    <div style={{ color: '#F1F5F9', fontWeight: 700, fontSize: 12 }}>{r.provider}</div>
+                    <div style={{ color: '#64748B', fontSize: 10, marginTop: 2 }}>{r.host} · Port {r.port} · SSL {r.ssl}</div>
+                    <div style={{ color: '#F59E0B', fontSize: 10, marginTop: 2 }}>💡 {r.note}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ color: '#64748B', fontSize: 11, marginTop: 10 }}>
+                👆 Click any provider above to auto-fill the host, port and SSL settings
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="SMTP Host" note="e.g. smtp.gmail.com">
                 <input style={S.input} value={smtp.smtp_host} onChange={p(setSmtp)('smtp_host')} placeholder="smtp.gmail.com" />
               </Field>
-              <Field label="SMTP Port" note="Usually 587 or 465">
+              <Field label="SMTP Port" note="587 = STARTTLS (SSL No) · 465 = SSL (SSL Yes)">
                 <input style={S.input} value={smtp.smtp_port} onChange={p(setSmtp)('smtp_port')} placeholder="587" />
               </Field>
             </div>
@@ -278,9 +309,42 @@ export default function AdminProfile() {
                 </button>
               </div>
               <p style={{ color: '#64748B', fontSize: 11, margin: '8px 0 0' }}>
-                Save mail settings first, then send a test to verify your SMTP configuration works.
+                ① Save mail settings first → ② then click Send Test
               </p>
             </div>
+
+            {/* Test result — shows exact error diagnosis */}
+            {testResult && (
+              <div style={{
+                marginTop: 14,
+                background: testResult.success ? '#10B98111' : '#EF444411',
+                border: `1px solid ${testResult.success ? '#10B98133' : '#EF444433'}`,
+                borderRadius: 10, padding: 16,
+              }}>
+                <div style={{
+                  fontWeight: 800, fontSize: 14,
+                  color: testResult.success ? '#10B981' : '#EF4444',
+                  marginBottom: testResult.fix ? 10 : 0,
+                }}>
+                  {testResult.message}
+                </div>
+                {testResult.fix && (
+                  <div style={{ background: '#0D0D1A', borderRadius: 8, padding: '10px 14px', marginTop: 8 }}>
+                    <div style={{ color: '#F59E0B', fontWeight: 700, fontSize: 11, textTransform: 'uppercase', marginBottom: 6 }}>
+                      🔧 How to Fix
+                    </div>
+                    <div style={{ color: '#94A3B8', fontSize: 12, lineHeight: 1.7 }}>
+                      {testResult.fix}
+                    </div>
+                  </div>
+                )}
+                {testResult.raw_error && (
+                  <div style={{ color: '#334155', fontSize: 10, marginTop: 8, fontFamily: 'monospace' }}>
+                    Raw error: {testResult.raw_error}
+                  </div>
+                )}
+              </div>
+            )}
           </SectionCard>
         </div>
       </div>
