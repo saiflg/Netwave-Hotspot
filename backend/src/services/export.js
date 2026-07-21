@@ -71,15 +71,15 @@ exports.generateVoucherPDF = async (vouchers, stream) => {
       const drawHeader = () => {
         doc.rect(0, 0, PW, HEADER_H).fill('#0f172a');
         if (hasLogo) {
-          try { doc.image(LOGO_PATH, MARGIN, 8, { height: 36 }); } catch {}
+          try { doc.image(LOGO_PATH, MARGIN, 6, { height: 34 }); } catch {}
         }
-        const textX = hasLogo ? MARGIN + 110 : MARGIN;
-        doc.font('Helvetica-Bold').fontSize(14).fillColor('#ffffff')
-          .text('Blue Dot Networks', textX, 14);
-        doc.font('Helvetica').fontSize(8).fillColor('#94a3b8')
+        const textX = hasLogo ? MARGIN + 105 : MARGIN;
+        doc.font('Helvetica-Bold').fontSize(13).fillColor('#ffffff')
+          .text('Blue Dot Networks', textX, 10);
+        doc.font('Helvetica').fontSize(7.5).fillColor('#94a3b8')
           .text(
-            `Vouchers · Generated: ${new Date().toLocaleString()} · Total: ${vouchers.length}`,
-            textX, 32
+            `Vouchers · ${new Date().toLocaleString()} · Total: ${vouchers.length} · Layout: ${COLS} cols × ${ROWS_PER} rows = ${PER_PAGE}/page`,
+            textX, 26
           );
       };
 
