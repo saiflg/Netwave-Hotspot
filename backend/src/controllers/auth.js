@@ -248,13 +248,19 @@ exports.sendTestEmail = async (req, res, next) => {
     const cfg  = rows.reduce((a, r) => { a[r.key] = r.value; return a; }, {});
 
     // Give clear error if settings not saved yet
-    if (!cfg.smtp_host || !cfg.smtp_user || !cfg.smtp_pass) {
+    // Check which method is configured
+    const brevoKey = cfg.brevo_api_key || process.env.BREVO_API_KEY || '';
+    const hasSmtp  = cfg.smtp_host && cfg.smtp_user && cfg.smtp_pass;
+
+    if (!brevoKey && !hasSmtp) {
       return res.status(400).json({
         success: false,
-        message: '❌ SMTP not configured. Please fill in all fields (Host, Port, Username, Password) and click Save Mail Settings first.',
-        hint:    'Do not click Send Test Email before saving your settings.',
+        message: '❌ No email method configured.',
+        fix: 'RECOMMENDED: Add BREVO_API_KEY to your Render environment variables (free, no port issues). OR: Fill in SMTP settings and click Save Mail Settings first.',
       });
     }
+
+    logger.info(`[TestEmail] Method: ${brevoKey ? 'Brevo API' : 'SMTP'} host=${cfg.smtp_host} user=${cfg.smtp_user}`);
 
     // Show what settings are being used (helps with debugging)
     logger.info(`[TestEmail] Testing SMTP: host=${cfg.smtp_host} port=${cfg.smtp_port} user=${cfg.smtp_user} ssl=${cfg.smtp_secure}`);
@@ -292,9 +298,9 @@ exports.sendTestEmail = async (req, res, next) => {
     let diagnosis = '';
     let fix = '';
 
-    if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
-      diagnosis = 'Connection timed out — cannot reach the SMTP server.';
-      fix = 'Check: (1) SMTP host is spelled correctly e.g. smtp.gmail.com — (2) Port is correct: 587 for SSL=No, 465 for SSL=Yes — (3) You are not using port 25 (blocked by Render)';
+    if (msg.includes('ETIMEDOUT') || msg.includes('timeout') || msg.includes('Connection timeout')) {
+      diagnosis = 'Connection timed out — Render free tier blocks outgoing SMTP ports.';
+      fix = 'BEST FIX: Use Brevo API instead of SMTP — it works on Render free tier with no port restrictions. Go to brevo.com → sign up free → SMTP & API → API Keys → copy your key → add it as BREVO_API_KEY in Render environment variables. Then redeploy.';
     } else if (msg.includes('ECONNREFUSED')) {
       diagnosis = 'Connection refused — wrong port or host.';
       fix = 'Use port 587 with SSL=No, or port 465 with SSL=Yes. Check the hostname.';

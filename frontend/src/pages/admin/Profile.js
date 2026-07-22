@@ -258,6 +258,25 @@ export default function AdminProfile() {
           {/* SMTP Settings */}
           <SectionCard icon="📬" title="Mail / SMTP Settings">
 
+            {/* RECOMMENDED: Brevo API key — works on Render free tier */}
+            <div style={{ background:'#10B98111', border:'1px solid #10B98133', borderRadius:10, padding:14, marginBottom:16 }}>
+              <div style={{ color:'#10B981', fontWeight:800, fontSize:13, marginBottom:6 }}>
+                ⭐ Recommended — Brevo API (Free, No Port Issues)
+              </div>
+              <div style={{ color:'#64748B', fontSize:12, marginBottom:10, lineHeight:1.6 }}>
+                Render free tier blocks SMTP ports. Use Brevo API instead — free 300 emails/day, works instantly.
+                Get your free API key at <strong style={{ color:'#10B981' }}>brevo.com</strong> → SMTP &amp; API → API Keys
+              </div>
+              <Field label="Brevo API Key" note="Paste your Brevo API key here — starts with xkeysib-">
+                <input style={S.input} value={smtp.brevo_api_key} onChange={p(setSmtp)('brevo_api_key')} placeholder="xkeysib-xxxxxxxxxxxxxxxx" />
+              </Field>
+              <div style={{ color:'#64748B', fontSize:11, marginTop:4 }}>
+                {smtp.brevo_api_key
+                  ? '✅ Brevo API key entered — this will be used for all emails (SMTP settings below are ignored)'
+                  : '⚠️ No Brevo key — system will try SMTP below (may timeout on Render free tier)'}
+              </div>
+            </div>
+
             {/* Provider quick-fill buttons */}
             <div style={{ background:'#0D0D1A', borderRadius:10, padding:14, marginBottom:16 }}>
               <div style={{ color:'#A5B4FC', fontWeight:700, fontSize:12, marginBottom:10 }}>📋 Quick Fill — Click to auto-fill settings</div>
